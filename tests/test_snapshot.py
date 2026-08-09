@@ -252,6 +252,93 @@ async def test_reports_deterministic_source_attributed_fleet_version_skew():
 
 
 @pytest.mark.asyncio
+async def test_reports_target_attributed_incomplete_plugin_evidence_without_config_details():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/healthz":
+            return httpx.Response(
+                200,
+                json={"ok": True, "graph_compiled": True, "setup_complete": True, "ui": "none"},
+            )
+        plugins = []
+        if request.url.host == "alpha.test":
+            plugins = [
+                {
+                    "id": "notes",
+                    "name": "Notes",
+                    "version": "0.2.0",
+                    "enabled": True,
+                    "incomplete": True,
+                    "needs_config": [{"key": "PRIVATE_PATH", "label": "Private path"}],
+                },
+                {
+                    "id": "github",
+                    "name": "GitHub",
+                    "version": "0.4.0",
+                    "enabled": True,
+                    "incomplete": True,
+                    "needs_config": [{"key": "API_KEY", "label": "API key"}],
+                },
+                {
+                    "id": "disabled",
+                    "name": "Disabled",
+                    "version": "0.1.0",
+                    "enabled": False,
+                    "incomplete": True,
+                },
+                {
+                    "id": "ready",
+                    "name": "Ready",
+                    "version": "1.0.0",
+                    "enabled": True,
+                    "incomplete": False,
+                },
+            ]
+        return httpx.Response(
+            200,
+            json={
+                "setup_complete": True,
+                "graph_loaded": True,
+                "version": "0.127.0",
+                "plugins": plugins,
+                "skills": {},
+                "mcp": {},
+                "warnings": [],
+            },
+        )
+
+    targets = [
+        {"id": "beta", "target_url": "https://beta.test"},
+        {"id": "alpha", "target_url": "https://alpha.test"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fleet = await snapshot_module.collect_fleet_snapshot(targets, client=client, observed_at=OBSERVED_AT)
+
+    assert fleet["status"] == "attention_required"
+    assert fleet["findings"] == [
+        {
+            "code": "plugin_configuration_incomplete",
+            "severity": "attention",
+            "scope": "target",
+            "target": "alpha",
+            "observed_at": "2026-08-09T16:30:00Z",
+            "source": "GET /api/runtime/status",
+            "classification": "diagnostic",
+            "evidence": {
+                "plugins": [
+                    {"id": "github", "name": "GitHub", "version": "0.4.0"},
+                    {"id": "notes", "name": "Notes", "version": "0.2.0"},
+                ]
+            },
+            "safe_next_inspection": "Inspect this target's plugin settings for missing required configuration.",
+        }
+    ]
+    rendered = json.dumps(fleet)
+    assert "API_KEY" not in rendered
+    assert "PRIVATE_PATH" not in rendered
+    assert "Disabled" not in json.dumps(fleet["findings"])
+
+
+@pytest.mark.asyncio
 async def test_rejects_duplicate_target_ids_before_network_activity():
     requests: list[httpx.Request] = []
 

@@ -209,36 +209,60 @@ async def collect_snapshot(
 
 
 def _fleet_findings(snapshots: list[dict[str, Any]], *, observed_at: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     versions: dict[str, list[str]] = {}
     for snapshot in snapshots:
         runtime = snapshot["sources"]["runtime"]
         if runtime["state"] != "available":
             continue
-        version = str(runtime["evidence"].get("version") or "").strip()
-        if not version:
-            continue
-        versions.setdefault(version, []).append(snapshot["target"]["id"])
+        runtime_evidence = runtime["evidence"]
+        version = str(runtime_evidence.get("version") or "").strip()
+        if version:
+            versions.setdefault(version, []).append(snapshot["target"]["id"])
 
-    if len(versions) <= 1:
-        return []
+        incomplete_plugins = sorted(
+            (
+                {key: plugin[key] for key in ("id", "name", "version") if key in plugin}
+                for plugin in runtime_evidence.get("plugins", [])
+                if plugin.get("enabled") is True and plugin.get("incomplete") is True
+            ),
+            key=lambda plugin: str(plugin["id"]),
+        )
+        if incomplete_plugins:
+            findings.append(
+                {
+                    "code": "plugin_configuration_incomplete",
+                    "severity": "attention",
+                    "scope": "target",
+                    "target": snapshot["target"]["id"],
+                    "observed_at": observed_at,
+                    "source": "GET /api/runtime/status",
+                    "classification": "diagnostic",
+                    "evidence": {"plugins": incomplete_plugins},
+                    "safe_next_inspection": "Inspect this target's plugin settings for missing required configuration.",
+                }
+            )
 
-    return [
-        {
-            "code": "fleet_version_skew",
-            "severity": "attention",
-            "scope": "fleet",
-            "observed_at": observed_at,
-            "source": "GET /api/runtime/status",
-            "classification": "signal",
-            "evidence": {
-                "versions": [
-                    {"version": version, "targets": sorted(target_ids)}
-                    for version, target_ids in sorted(versions.items())
-                ]
-            },
-            "safe_next_inspection": "Confirm the intended protoAgent version for each target before considering an update.",
-        }
-    ]
+    if len(versions) > 1:
+        findings.append(
+            {
+                "code": "fleet_version_skew",
+                "severity": "attention",
+                "scope": "fleet",
+                "observed_at": observed_at,
+                "source": "GET /api/runtime/status",
+                "classification": "signal",
+                "evidence": {
+                    "versions": [
+                        {"version": version, "targets": sorted(target_ids)}
+                        for version, target_ids in sorted(versions.items())
+                    ]
+                },
+                "safe_next_inspection": "Confirm the intended protoAgent version for each target before considering an update.",
+            }
+        )
+
+    return sorted(findings, key=lambda finding: (finding["code"], finding.get("target", "")))
 
 
 async def collect_fleet_snapshot(

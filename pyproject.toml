@@ -1,7 +1,7 @@
 [project]
 name = "protoagent-operator-control"
-version = "0.3.0"
-description = "Read-only normalized fleet evidence with explicit version-skew findings."
+version = "0.4.0"
+description = "Read-only normalized fleet evidence for version skew and incomplete plugins."
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

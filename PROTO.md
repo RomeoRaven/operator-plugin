@@ -8,9 +8,9 @@ This standalone protoAgent plugin is the durable owner for the operator-control-
 
 `PROTO.md` is this repository's single agent-grounding source. Ordinary discovery surfaces such as `README.md` point here, matching the AOS pointer model. Do not add `AGENTS.md` or `CLAUDE.md` pointer copies by convention; those high-power instruction surfaces require a separate, explicit repository decision.
 
-The current 0.3 slice inspects up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts, returns deterministic source-attributed fleet evidence, and emits one truthful attention finding when observed runtime versions differ.
+The current 0.4 slice inspects up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts, returns deterministic source-attributed fleet evidence, and emits bounded attention findings for observed runtime-version skew and enabled plugins reported incomplete by the target.
 
-Do not add fleet writes, config mutation, process control, consent execution, broad alert policy, dashboards, writable target registries, or upstream-core changes to this slice.
+Do not add fleet writes, config mutation, process control, consent execution, broad alert policy, raw required-config details, plugin trust/update policy, dashboards, writable target registries, or upstream-core changes to this slice.
 
 ## Runtime shape
 
@@ -31,7 +31,8 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 - Target interaction is GET-only: `/healthz` and `/api/runtime/status`.
 - Targets are collected concurrently; output is sorted by target ID so completion order cannot change the contract.
 - A version-skew finding is an `attention` signal sourced from available runtime evidence. It reports observed version groups but never guesses which target is outdated or which version is intended.
-- A fleet with consistent observed versions emits no version-skew finding; broader severity, ranking, deduplication, and alert policy belong to a later issue #6 slice.
+- An incomplete-plugin finding is a target-level `attention` diagnostic sourced from the host's explicit `enabled` and `incomplete` runtime facts. It exposes only plugin ID, name, and version—not `needs_config`, environment names, loader errors, or tracebacks.
+- A fleet with consistent observed versions and no enabled incomplete plugins emits no finding; broader severity, ranking, deduplication, trust, update, and alert policy belong to later slices.
 - Fleet status is only `ready` or `attention_required`.
 - Output is an allowlisted projection. Never pass through raw target JSON, model identity, instance UID, filesystem paths, MCP server config/environment, or auth values.
 - One failed source must not erase evidence from another source; one failed target must not erase evidence from another target.
@@ -49,6 +50,7 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 7. Given no configured targets, when the tool runs, then it returns a clear `not_configured` result without network activity.
 8. Given two or more observed runtime versions, when the fleet snapshot completes, then one deterministic `fleet_version_skew` attention signal groups target IDs by exact version and attributes the evidence to `GET /api/runtime/status`.
 9. Given all comparable targets report one version, when the fleet snapshot completes, then no version-skew finding is manufactured.
+10. Given an enabled plugin is explicitly reported `incomplete`, when the fleet snapshot completes, then one target-attributed `plugin_configuration_incomplete` diagnostic lists only plugin ID, name, and version; disabled/complete plugins and raw required-config metadata do not enter the finding.
 
 ## Commands
 
@@ -63,7 +65,7 @@ Run the suite standalone. For host integration, load the plugin through the curr
 
 ## Files
 
-- `snapshot.py` — URL/target validation, concurrent GET collection, allowlisted normalization, deterministic fleet summary, and bounded version-skew finding
+- `snapshot.py` — URL/target validation, concurrent GET collection, allowlisted normalization, deterministic fleet summary, and bounded version-skew/incomplete-plugin findings
 - `__init__.py` — zero-argument `operator_snapshot` tool, host config parsing, and plugin registration
 - `protoagent.plugin.yaml` — disabled-by-default manifest, target list, and secret token-map schema
 - `tests/test_snapshot.py` — behavior/security contract
