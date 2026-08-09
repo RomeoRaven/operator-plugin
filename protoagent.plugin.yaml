@@ -1,0 +1,22 @@
+id: operator_control
+name: Operator Control
+version: 0.1.0
+description: >-
+  Read-only operator evidence for one configured protoAgent target. The first
+  slice performs GET-only health and runtime-status reads, records source and
+  freshness, isolates endpoint failures, and returns a secret-free normalized
+  snapshot through the operator_snapshot tool.
+enabled: false
+config_section: operator_control
+config:
+  target_url: ""
+  token: ""
+  timeout_seconds: 5
+secrets: [token]
+settings:
+  - { key: target_url, label: "Target protoAgent URL", type: string, description: "Base URL for the one target inspected by this first slice." }
+  - { key: token, label: "Target bearer token", type: secret, description: "Bearer token sent to the target and never included in evidence." }
+  - { key: timeout_seconds, label: "Read timeout (seconds)", type: number, description: "Per-client timeout, clamped to 1–30 seconds." }
+capabilities:
+  network: ["*"]
+  filesystem: none
