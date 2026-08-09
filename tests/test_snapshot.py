@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+import snapshot as snapshot_module
 from snapshot import collect_snapshot
 
 OBSERVED_AT = datetime(2026, 8, 9, 16, 30, tzinfo=timezone.utc)
@@ -126,6 +127,169 @@ async def test_collects_one_target_as_normalized_live_read_only_evidence():
 
 
 @pytest.mark.asyncio
+async def test_collects_configured_fleet_as_deterministic_secret_free_summary():
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        host = request.url.host
+        if host == "lost.test":
+            raise httpx.ConnectError("target unavailable", request=request)
+        if request.url.path == "/healthz":
+            ready = host == "alpha.test"
+            return httpx.Response(
+                200 if ready else 503,
+                json={
+                    "ok": ready,
+                    "graph_compiled": ready,
+                    "setup_complete": True,
+                    "ui": "none",
+                    "secret": f"must-not-leak-{host}",
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "setup_complete": True,
+                "graph_loaded": host == "alpha.test",
+                "version": "0.127.0",
+                "plugins": [],
+                "skills": {},
+                "mcp": {},
+                "warnings": [],
+            },
+        )
+
+    targets = [
+        {"id": "zeta", "target_url": "https://zeta.test/", "token": "zeta-secret"},
+        {"id": "alpha", "target_url": "https://alpha.test", "token": "alpha-secret"},
+        {"id": "lost", "target_url": "https://lost.test", "token": "lost-secret"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fleet = await snapshot_module.collect_fleet_snapshot(targets, client=client, observed_at=OBSERVED_AT)
+
+    assert fleet["schema_version"] == "operator.fleet_snapshot.v1"
+    assert fleet["observed_at"] == "2026-08-09T16:30:00Z"
+    assert fleet["freshness"] == "live"
+    assert fleet["status"] == "attention_required"
+    assert fleet["summary"] == {
+        "total": 3,
+        "ready": 1,
+        "not_ready": 1,
+        "degraded": 0,
+        "unreachable": 1,
+    }
+    assert [target["target"]["id"] for target in fleet["targets"]] == ["alpha", "lost", "zeta"]
+    assert [target["status"] for target in fleet["targets"]] == ["ready", "unreachable", "not_ready"]
+    assert len(requests) == 6
+    assert all(request.method == "GET" for request in requests)
+    expected_tokens = {
+        "alpha.test": "Bearer alpha-secret",
+        "lost.test": "Bearer lost-secret",
+        "zeta.test": "Bearer zeta-secret",
+    }
+    assert all(request.headers["authorization"] == expected_tokens[request.url.host] for request in requests)
+    rendered = json.dumps(fleet)
+    assert "alpha-secret" not in rendered
+    assert "lost-secret" not in rendered
+    assert "zeta-secret" not in rendered
+    assert "must-not-leak" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_rejects_duplicate_target_ids_before_network_activity():
+    requests: list[httpx.Request] = []
+
+    async def unexpected_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={})
+
+    targets = [
+        {"id": "same", "target_url": "https://one.test"},
+        {"id": "same", "target_url": "https://two.test"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unexpected_request)) as client:
+        with pytest.raises(ValueError, match="duplicate target id"):
+            await snapshot_module.collect_fleet_snapshot(targets, client=client)
+
+    assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_rejects_more_than_twenty_targets_before_network_activity():
+    requests: list[httpx.Request] = []
+
+    async def unexpected_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={})
+
+    targets = [{"id": f"target-{index}", "target_url": f"https://target-{index}.test"} for index in range(21)]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unexpected_request)) as client:
+        with pytest.raises(ValueError, match="at most 20 targets"):
+            await snapshot_module.collect_fleet_snapshot(targets, client=client)
+
+    assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_malformed_runtime_evidence_isolated_to_one_target():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/healthz":
+            return httpx.Response(
+                200,
+                json={"ok": True, "graph_compiled": True, "setup_complete": True, "ui": "none"},
+            )
+        if request.url.host == "bad.test":
+            return httpx.Response(
+                200,
+                json={
+                    "setup_complete": True,
+                    "graph_loaded": True,
+                    "version": "0.127.0",
+                    "plugins": [],
+                    "skills": {"count": "not-a-number"},
+                    "mcp": {},
+                    "warnings": [],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "setup_complete": True,
+                "graph_loaded": True,
+                "version": "0.127.0",
+                "plugins": [],
+                "skills": {},
+                "mcp": {},
+                "warnings": [],
+            },
+        )
+
+    targets = [
+        {"id": "good", "target_url": "https://good.test"},
+        {"id": "bad", "target_url": "https://bad.test"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fleet = await snapshot_module.collect_fleet_snapshot(targets, client=client, observed_at=OBSERVED_AT)
+
+    assert [target["status"] for target in fleet["targets"]] == ["degraded", "ready"]
+    assert fleet["targets"][0]["sources"]["runtime"] == {
+        "source": "GET /api/runtime/status",
+        "observed_at": "2026-08-09T16:30:00Z",
+        "state": "unavailable",
+        "http_status": 200,
+        "error": "invalid runtime evidence",
+    }
+    assert fleet["summary"] == {
+        "total": 2,
+        "ready": 1,
+        "not_ready": 0,
+        "degraded": 1,
+        "unreachable": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_one_failed_source_is_isolated_and_marks_snapshot_degraded():
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/healthz":
@@ -199,7 +363,11 @@ def test_registers_one_read_only_zero_argument_tool(monkeypatch):
     plugin = _load_plugin(monkeypatch)
     registered = []
     registry = SimpleNamespace(
-        config={"target_url": "http://127.0.0.1:8123", "token": "secret", "timeout_seconds": 4},
+        config={
+            "targets": ["local=http://127.0.0.1:8123"],
+            "target_tokens": json.dumps({"local": "secret"}),
+            "timeout_seconds": 4,
+        },
         register_tool=registered.append,
     )
 
@@ -210,19 +378,56 @@ def test_registers_one_read_only_zero_argument_tool(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tool_parses_operator_configured_targets_and_secret_token_map(monkeypatch):
+    plugin = _load_plugin(monkeypatch)
+    collected = []
+
+    async def fake_collect(targets, *, timeout_seconds):
+        collected.append((targets, timeout_seconds))
+        return {
+            "schema_version": "operator.fleet_snapshot.v1",
+            "status": "ready",
+            "summary": {"total": 2, "ready": 2, "not_ready": 0, "degraded": 0, "unreachable": 0},
+            "targets": [],
+        }
+
+    monkeypatch.setattr(plugin, "collect_fleet_snapshot", fake_collect, raising=False)
+    tool = plugin._build_tool(
+        {
+            "targets": ["zeta=https://zeta.test", "alpha=https://alpha.test"],
+            "target_tokens": json.dumps({"alpha": "alpha-secret", "zeta": "zeta-secret"}),
+            "timeout_seconds": 7,
+        }
+    )
+
+    result = json.loads(await tool.ainvoke({}))
+
+    assert result["schema_version"] == "operator.fleet_snapshot.v1"
+    assert collected == [
+        (
+            [
+                {"id": "zeta", "target_url": "https://zeta.test", "token": "zeta-secret"},
+                {"id": "alpha", "target_url": "https://alpha.test", "token": "alpha-secret"},
+            ],
+            7.0,
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_unconfigured_tool_returns_without_network_activity(monkeypatch):
     plugin = _load_plugin(monkeypatch)
 
     async def unexpected_network(*args, **kwargs):
         raise AssertionError("unconfigured tool attempted network activity")
 
-    monkeypatch.setattr(plugin, "collect_snapshot", unexpected_network)
+    monkeypatch.setattr(plugin, "collect_fleet_snapshot", unexpected_network, raising=False)
     tool = plugin._build_tool({})
 
     result = json.loads(await tool.ainvoke({}))
 
     assert result == {
-        "schema_version": "operator.snapshot.v1",
+        "schema_version": "operator.fleet_snapshot.v1",
         "status": "not_configured",
-        "error": "Configure operator_control.target_url before inspecting a target.",
+        "error": "Configure operator_control.targets before inspecting the fleet.",
     }

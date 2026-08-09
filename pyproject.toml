@@ -1,7 +1,7 @@
 [project]
 name = "protoagent-operator-control"
-version = "0.1.0"
-description = "Read-only normalized evidence for a configured protoAgent target."
+version = "0.2.0"
+description = "Read-only normalized evidence for a configured protoAgent fleet."
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

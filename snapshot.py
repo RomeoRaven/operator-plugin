@@ -10,6 +10,8 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 _SCHEMA_VERSION = "operator.snapshot.v1"
+_FLEET_SCHEMA_VERSION = "operator.fleet_snapshot.v1"
+_MAX_TARGETS = 20
 _ENDPOINTS = {"health": "/healthz", "runtime": "/api/runtime/status"}
 
 
@@ -116,7 +118,16 @@ async def _read_source(
             "error": "invalid JSON response",
         }
 
-    evidence = _safe_health(payload) if name == "health" else _safe_runtime(payload)
+    try:
+        evidence = _safe_health(payload) if name == "health" else _safe_runtime(payload)
+    except (TypeError, ValueError, OverflowError):
+        return {
+            "source": source,
+            "observed_at": observed_at,
+            "state": "unavailable",
+            "http_status": response.status_code,
+            "error": f"invalid {name} evidence",
+        }
     return {
         "source": source,
         "observed_at": observed_at,
@@ -194,4 +205,70 @@ async def collect_snapshot(
         "freshness": "live",
         "status": _overall_status(sources),
         "sources": sources,
+    }
+
+
+async def collect_fleet_snapshot(
+    targets: list[dict[str, Any]],
+    *,
+    timeout_seconds: float = 5,
+    client: httpx.AsyncClient | None = None,
+    observed_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Collect one deterministic read-only snapshot across configured targets."""
+    if len(targets) > _MAX_TARGETS:
+        raise ValueError(f"configure at most {_MAX_TARGETS} targets")
+    observed_value = observed_at or datetime.now(timezone.utc)
+    normalized = sorted(
+        (
+            {
+                "id": str(target.get("id") or "").strip(),
+                "target_url": _normalize_base_url(str(target.get("target_url") or "")),
+                "token": str(target.get("token") or ""),
+            }
+            for target in targets
+        ),
+        key=lambda target: target["id"],
+    )
+    target_ids = [target["id"] for target in normalized]
+    if len(target_ids) != len(set(target_ids)):
+        raise ValueError("duplicate target id")
+
+    async def collect(active_client: httpx.AsyncClient) -> list[dict[str, Any]]:
+        snapshots = await asyncio.gather(
+            *(
+                collect_snapshot(
+                    target["target_url"],
+                    token=target["token"],
+                    client=active_client,
+                    observed_at=observed_value,
+                )
+                for target in normalized
+            )
+        )
+        for target, snapshot in zip(normalized, snapshots, strict=True):
+            snapshot["target"] = {
+                "id": target["id"],
+                "base_url": snapshot["target"]["base_url"],
+            }
+        return snapshots
+
+    if client is None:
+        timeout = max(1.0, min(float(timeout_seconds), 30.0))
+        async with httpx.AsyncClient(timeout=timeout) as owned_client:
+            snapshots = await collect(owned_client)
+    else:
+        snapshots = await collect(client)
+
+    counts = {status: 0 for status in ("ready", "not_ready", "degraded", "unreachable")}
+    for snapshot in snapshots:
+        counts[snapshot["status"]] += 1
+
+    return {
+        "schema_version": _FLEET_SCHEMA_VERSION,
+        "observed_at": _timestamp(observed_value),
+        "freshness": "live",
+        "status": "ready" if counts["ready"] == len(snapshots) else "attention_required",
+        "summary": {"total": len(snapshots), **counts},
+        "targets": snapshots,
     }
