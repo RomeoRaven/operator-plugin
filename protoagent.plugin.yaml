@@ -1,11 +1,11 @@
 id: operator_control
 name: Operator Control
-version: 0.2.0
+version: 0.3.0
 description: >-
   Read-only operator evidence for a small configured protoAgent fleet. The tool
   performs GET-only health and runtime-status reads concurrently, records source
-  and freshness, isolates target failures, and returns a deterministic secret-free
-  fleet summary.
+  and freshness, isolates target failures, and returns deterministic secret-free
+  fleet evidence with an explicit version-skew finding.
 enabled: false
 config_section: operator_control
 config:

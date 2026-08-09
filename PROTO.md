@@ -8,9 +8,9 @@ This standalone protoAgent plugin is the durable owner for the operator-control-
 
 `PROTO.md` is this repository's single agent-grounding source. Ordinary discovery surfaces such as `README.md` point here, matching the AOS pointer model. Do not add `AGENTS.md` or `CLAUDE.md` pointer copies by convention; those high-power instruction surfaces require a separate, explicit repository decision.
 
-The current 0.2 slice intentionally does one thing: from a dedicated operator workspace, inspect up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts and return deterministic, source-attributed fleet evidence.
+The current 0.3 slice inspects up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts, returns deterministic source-attributed fleet evidence, and emits one truthful attention finding when observed runtime versions differ.
 
-Do not add fleet writes, config mutation, process control, consent execution, alert policy, dashboards, writable target registries, or upstream-core changes to this slice.
+Do not add fleet writes, config mutation, process control, consent execution, broad alert policy, dashboards, writable target registries, or upstream-core changes to this slice.
 
 ## Runtime shape
 
@@ -30,7 +30,9 @@ Do not add fleet writes, config mutation, process control, consent execution, al
 - Target URLs must use HTTP(S) and cannot embed credentials.
 - Target interaction is GET-only: `/healthz` and `/api/runtime/status`.
 - Targets are collected concurrently; output is sorted by target ID so completion order cannot change the contract.
-- Fleet status is only `ready` or `attention_required`; severity/ranking policy belongs to a later issue #6 slice.
+- A version-skew finding is an `attention` signal sourced from available runtime evidence. It reports observed version groups but never guesses which target is outdated or which version is intended.
+- A fleet with consistent observed versions emits no version-skew finding; broader severity, ranking, deduplication, and alert policy belong to a later issue #6 slice.
+- Fleet status is only `ready` or `attention_required`.
 - Output is an allowlisted projection. Never pass through raw target JSON, model identity, instance UID, filesystem paths, MCP server config/environment, or auth values.
 - One failed source must not erase evidence from another source; one failed target must not erase evidence from another target.
 - Every source records endpoint, observation time, availability, and HTTP status.
@@ -45,6 +47,8 @@ Do not add fleet writes, config mutation, process control, consent execution, al
 5. Given per-target bearer auth or sensitive fields in upstream payloads, when evidence is rendered, then none of those values are present.
 6. Given duplicate IDs or more than 20 targets, when collection is requested, then configuration fails before network activity.
 7. Given no configured targets, when the tool runs, then it returns a clear `not_configured` result without network activity.
+8. Given two or more observed runtime versions, when the fleet snapshot completes, then one deterministic `fleet_version_skew` attention signal groups target IDs by exact version and attributes the evidence to `GET /api/runtime/status`.
+9. Given all comparable targets report one version, when the fleet snapshot completes, then no version-skew finding is manufactured.
 
 ## Commands
 
@@ -59,7 +63,7 @@ Run the suite standalone. For host integration, load the plugin through the curr
 
 ## Files
 
-- `snapshot.py` — URL/target validation, concurrent GET collection, allowlisted normalization, and deterministic fleet summary
+- `snapshot.py` — URL/target validation, concurrent GET collection, allowlisted normalization, deterministic fleet summary, and bounded version-skew finding
 - `__init__.py` — zero-argument `operator_snapshot` tool, host config parsing, and plugin registration
 - `protoagent.plugin.yaml` — disabled-by-default manifest, target list, and secret token-map schema
 - `tests/test_snapshot.py` — behavior/security contract

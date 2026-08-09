@@ -179,6 +179,7 @@ async def test_collects_configured_fleet_as_deterministic_secret_free_summary():
         "degraded": 0,
         "unreachable": 1,
     }
+    assert fleet["findings"] == []
     assert [target["target"]["id"] for target in fleet["targets"]] == ["alpha", "lost", "zeta"]
     assert [target["status"] for target in fleet["targets"]] == ["ready", "unreachable", "not_ready"]
     assert len(requests) == 6
@@ -194,6 +195,60 @@ async def test_collects_configured_fleet_as_deterministic_secret_free_summary():
     assert "lost-secret" not in rendered
     assert "zeta-secret" not in rendered
     assert "must-not-leak" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_reports_deterministic_source_attributed_fleet_version_skew():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/healthz":
+            return httpx.Response(
+                200,
+                json={"ok": True, "graph_compiled": True, "setup_complete": True, "ui": "none"},
+            )
+        versions = {
+            "zeta.test": "0.127.0",
+            "alpha.test": "0.127.0",
+            "beta.test": "0.126.0",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "setup_complete": True,
+                "graph_loaded": True,
+                "version": versions[request.url.host],
+                "plugins": [],
+                "skills": {},
+                "mcp": {},
+                "warnings": [],
+            },
+        )
+
+    targets = [
+        {"id": "zeta", "target_url": "https://zeta.test"},
+        {"id": "beta", "target_url": "https://beta.test"},
+        {"id": "alpha", "target_url": "https://alpha.test"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fleet = await snapshot_module.collect_fleet_snapshot(targets, client=client, observed_at=OBSERVED_AT)
+
+    assert fleet["status"] == "attention_required"
+    assert fleet["findings"] == [
+        {
+            "code": "fleet_version_skew",
+            "severity": "attention",
+            "scope": "fleet",
+            "observed_at": "2026-08-09T16:30:00Z",
+            "source": "GET /api/runtime/status",
+            "classification": "signal",
+            "evidence": {
+                "versions": [
+                    {"version": "0.126.0", "targets": ["beta"]},
+                    {"version": "0.127.0", "targets": ["alpha", "zeta"]},
+                ]
+            },
+            "safe_next_inspection": "Confirm the intended protoAgent version for each target before considering an update.",
+        }
+    ]
 
 
 @pytest.mark.asyncio

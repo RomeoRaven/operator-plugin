@@ -208,6 +208,39 @@ async def collect_snapshot(
     }
 
 
+def _fleet_findings(snapshots: list[dict[str, Any]], *, observed_at: str) -> list[dict[str, Any]]:
+    versions: dict[str, list[str]] = {}
+    for snapshot in snapshots:
+        runtime = snapshot["sources"]["runtime"]
+        if runtime["state"] != "available":
+            continue
+        version = str(runtime["evidence"].get("version") or "").strip()
+        if not version:
+            continue
+        versions.setdefault(version, []).append(snapshot["target"]["id"])
+
+    if len(versions) <= 1:
+        return []
+
+    return [
+        {
+            "code": "fleet_version_skew",
+            "severity": "attention",
+            "scope": "fleet",
+            "observed_at": observed_at,
+            "source": "GET /api/runtime/status",
+            "classification": "signal",
+            "evidence": {
+                "versions": [
+                    {"version": version, "targets": sorted(target_ids)}
+                    for version, target_ids in sorted(versions.items())
+                ]
+            },
+            "safe_next_inspection": "Confirm the intended protoAgent version for each target before considering an update.",
+        }
+    ]
+
+
 async def collect_fleet_snapshot(
     targets: list[dict[str, Any]],
     *,
@@ -264,11 +297,14 @@ async def collect_fleet_snapshot(
     for snapshot in snapshots:
         counts[snapshot["status"]] += 1
 
+    observed = _timestamp(observed_value)
+    findings = _fleet_findings(snapshots, observed_at=observed)
     return {
         "schema_version": _FLEET_SCHEMA_VERSION,
-        "observed_at": _timestamp(observed_value),
+        "observed_at": observed,
         "freshness": "live",
-        "status": "ready" if counts["ready"] == len(snapshots) else "attention_required",
+        "status": "ready" if counts["ready"] == len(snapshots) and not findings else "attention_required",
         "summary": {"total": len(snapshots), **counts},
+        "findings": findings,
         "targets": snapshots,
     }
