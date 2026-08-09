@@ -16,12 +16,15 @@ def test_manifest_and_project_are_safe_and_version_locked():
 
     assert manifest["id"] == "operator_control"
     assert manifest["enabled"] is False
-    assert manifest["config"]["target_url"] == ""
-    assert manifest["secrets"] == ["token"]
+    assert manifest["config"]["targets"] == []
+    assert manifest["config"]["target_tokens"] == ""
+    assert manifest["secrets"] == ["target_tokens"]
     assert manifest["capabilities"]["filesystem"] == "none"
     settings = {field["key"]: field for field in manifest["settings"]}
+    assert settings["targets"]["type"] == "string_list"
+    assert settings["target_tokens"]["type"] == "secret"
     assert settings["timeout_seconds"]["type"] == "number"
-    assert project["version"] == manifest["version"]
+    assert project["version"] == manifest["version"] == "0.2.0"
 
 
 def test_entry_imports_with_protoagent_host_package_semantics(monkeypatch):

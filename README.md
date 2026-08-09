@@ -1,13 +1,13 @@
 # Operator Control plugin
 
-A standalone, disabled-by-default protoAgent plugin for normalized operator evidence.
+A standalone, disabled-by-default protoAgent plugin for normalized operator evidence across a small configured fleet.
 
-The initial S1 slice exposes one zero-argument `operator_snapshot` tool. It inspects one operator-configured protoAgent target using only:
+The 0.2 S1 slice exposes one zero-argument `operator_snapshot` tool. It concurrently inspects up to 20 operator-configured protoAgent targets using only:
 
 - `GET /healthz`
 - `GET /api/runtime/status`
 
-The result records source and observation time, preserves partial evidence when one endpoint fails, and allowlists output so bearer tokens and sensitive upstream fields do not leak.
+The result records source and observation time, preserves partial evidence when an endpoint or target fails, sorts targets by stable operator ID, and allowlists output so bearer tokens and sensitive upstream fields do not leak.
 
 ## Status
 
@@ -20,12 +20,14 @@ plugins:
   enabled: [operator_control]
 
 operator_control:
-  target_url: http://127.0.0.1:8123
-  token: "" # store through the host secret path
+  targets:
+    - s1=http://127.0.0.1:8123
+    - lab=https://lab.example.test
+  target_tokens: '{"s1":"first-bearer","lab":"second-bearer"}' # store through the host secret path
   timeout_seconds: 5
 ```
 
-The tool intentionally accepts no target argument. The operator chooses the target in configuration; the model only reads it.
+Each target entry is `id=url`. `target_tokens` is an optional JSON object keyed by those IDs and is declared as one host-routed secret because protoAgent secret routing is top-level-key based. The tool intentionally accepts no target arguments: the operator chooses the bounded fleet in configuration; the model only reads it. Duplicate IDs and fleets above 20 fail before network activity.
 
 ## Verify
 
