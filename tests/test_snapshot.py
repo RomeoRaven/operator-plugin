@@ -15,6 +15,21 @@ from snapshot import collect_snapshot
 OBSERVED_AT = datetime(2026, 8, 9, 16, 30, tzinfo=timezone.utc)
 
 
+def _load_plugin(monkeypatch):
+    root = Path(__file__).resolve().parent.parent
+    module_name = "protoagent_plugin_operator_control_test"
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        root / "__init__.py",
+        submodule_search_locations=[str(root)],
+    )
+    assert spec is not None and spec.loader is not None
+    plugin = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, module_name, plugin)
+    spec.loader.exec_module(plugin)
+    return plugin
+
+
 @pytest.mark.asyncio
 async def test_collects_one_target_as_normalized_live_read_only_evidence():
     requests: list[httpx.Request] = []
@@ -181,18 +196,7 @@ async def test_rejects_non_http_and_credential_bearing_targets():
 
 
 def test_registers_one_read_only_zero_argument_tool(monkeypatch):
-    root = Path(__file__).resolve().parent.parent
-    module_name = "protoagent_plugin_operator_control_register_test"
-    spec = importlib.util.spec_from_file_location(
-        module_name,
-        root / "__init__.py",
-        submodule_search_locations=[str(root)],
-    )
-    assert spec is not None and spec.loader is not None
-    plugin = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, module_name, plugin)
-    spec.loader.exec_module(plugin)
-
+    plugin = _load_plugin(monkeypatch)
     registered = []
     registry = SimpleNamespace(
         config={"target_url": "http://127.0.0.1:8123", "token": "secret", "timeout_seconds": 4},
@@ -203,3 +207,22 @@ def test_registers_one_read_only_zero_argument_tool(monkeypatch):
 
     assert [tool.name for tool in registered] == ["operator_snapshot"]
     assert registered[0].args == {}
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_tool_returns_without_network_activity(monkeypatch):
+    plugin = _load_plugin(monkeypatch)
+
+    async def unexpected_network(*args, **kwargs):
+        raise AssertionError("unconfigured tool attempted network activity")
+
+    monkeypatch.setattr(plugin, "collect_snapshot", unexpected_network)
+    tool = plugin._build_tool({})
+
+    result = json.loads(await tool.ainvoke({}))
+
+    assert result == {
+        "schema_version": "operator.snapshot.v1",
+        "status": "not_configured",
+        "error": "Configure operator_control.target_url before inspecting a target.",
+    }

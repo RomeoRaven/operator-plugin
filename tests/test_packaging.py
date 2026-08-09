@@ -19,6 +19,8 @@ def test_manifest_and_project_are_safe_and_version_locked():
     assert manifest["config"]["target_url"] == ""
     assert manifest["secrets"] == ["token"]
     assert manifest["capabilities"]["filesystem"] == "none"
+    settings = {field["key"]: field for field in manifest["settings"]}
+    assert settings["timeout_seconds"]["type"] == "number"
     assert project["version"] == manifest["version"]
 
 

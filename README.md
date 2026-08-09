@@ -11,7 +11,7 @@ The result records source and observation time, preserves partial evidence when 
 
 ## Status
 
-Local S1 implementation for RomeoRaven/protoAgent issue #1. No public repository or upstream proposal has been created.
+S1-first implementation for [RomeoRaven/protoAgent issue #1](https://github.com/RomeoRaven/protoAgent/issues/1), published in the RR-owned [`RomeoRaven/operator-plugin`](https://github.com/RomeoRaven/operator-plugin) repository. Merge, release, and any upstream protoLabsAI proposal remain separate decisions.
 
 ## Configure
 

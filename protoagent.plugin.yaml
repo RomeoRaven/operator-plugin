@@ -16,7 +16,7 @@ secrets: [token]
 settings:
   - { key: target_url, label: "Target protoAgent URL", type: string, description: "Base URL for the one target inspected by this first slice." }
   - { key: token, label: "Target bearer token", type: secret, description: "Bearer token sent to the target and never included in evidence." }
-  - { key: timeout_seconds, label: "Read timeout (seconds)", type: int, description: "Per-client timeout, clamped to 1–30 seconds." }
+  - { key: timeout_seconds, label: "Read timeout (seconds)", type: number, description: "Per-client timeout, clamped to 1–30 seconds." }
 capabilities:
   network: ["*"]
   filesystem: none
