@@ -24,7 +24,7 @@ def test_manifest_and_project_are_safe_and_version_locked():
     assert settings["targets"]["type"] == "string_list"
     assert settings["target_tokens"]["type"] == "secret"
     assert settings["timeout_seconds"]["type"] == "number"
-    assert project["version"] == manifest["version"] == "0.3.0"
+    assert project["version"] == manifest["version"] == "0.4.0"
 
 
 def test_entry_imports_with_protoagent_host_package_semantics(monkeypatch):
