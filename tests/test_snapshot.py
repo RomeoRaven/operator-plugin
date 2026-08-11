@@ -179,7 +179,30 @@ async def test_collects_configured_fleet_as_deterministic_secret_free_summary():
         "degraded": 0,
         "unreachable": 1,
     }
-    assert fleet["findings"] == []
+    assert fleet["findings"] == [
+        {
+            "code": "target_readiness_attention",
+            "severity": "attention",
+            "scope": "target",
+            "target": "lost",
+            "observed_at": "2026-08-09T16:30:00Z",
+            "source": "GET /healthz and GET /api/runtime/status",
+            "classification": "diagnostic",
+            "evidence": {"status": "unreachable"},
+            "safe_next_inspection": "Inspect target reachability and authentication before retrying the snapshot.",
+        },
+        {
+            "code": "target_readiness_attention",
+            "severity": "attention",
+            "scope": "target",
+            "target": "zeta",
+            "observed_at": "2026-08-09T16:30:00Z",
+            "source": "GET /healthz and GET /api/runtime/status",
+            "classification": "diagnostic",
+            "evidence": {"status": "not_ready"},
+            "safe_next_inspection": "Inspect target startup and readiness evidence without changing the target.",
+        },
+    ]
     assert [target["target"]["id"] for target in fleet["targets"]] == ["alpha", "lost", "zeta"]
     assert [target["status"] for target in fleet["targets"]] == ["ready", "unreachable", "not_ready"]
     assert len(requests) == 6
@@ -429,6 +452,21 @@ async def test_malformed_runtime_evidence_isolated_to_one_target():
         "degraded": 1,
         "unreachable": 0,
     }
+    assert fleet["findings"] == [
+        {
+            "code": "target_readiness_attention",
+            "severity": "attention",
+            "scope": "target",
+            "target": "bad",
+            "observed_at": "2026-08-09T16:30:00Z",
+            "source": "GET /healthz and GET /api/runtime/status",
+            "classification": "diagnostic",
+            "evidence": {"status": "degraded"},
+            "safe_next_inspection": (
+                "Inspect the unavailable evidence source before drawing conclusions from the partial snapshot."
+            ),
+        }
+    ]
 
 
 @pytest.mark.asyncio

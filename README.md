@@ -2,7 +2,7 @@
 
 A standalone, disabled-by-default protoAgent plugin for normalized operator evidence across a small configured fleet.
 
-The 0.4 S1 slice exposes one zero-argument `operator_snapshot` tool. It concurrently inspects up to 20 operator-configured protoAgent targets using only:
+The 0.5 S1 slice exposes one zero-argument `operator_snapshot` tool. It concurrently inspects up to 20 operator-configured protoAgent targets using only:
 
 - `GET /healthz`
 - `GET /api/runtime/status`
@@ -11,10 +11,11 @@ The result records source and observation time, preserves partial evidence when 
 
 Bounded findings currently cover:
 
+- unreachable, degraded, or not-ready targets, reported as observed readiness diagnostics without changing the target;
 - exact runtime-version skew, grouped by target without guessing the intended version;
 - enabled plugins explicitly reported `incomplete`, attributed to the target and limited to plugin ID, name, and version.
 
-Version-consistent fleets with no incomplete enabled plugins stay quiet. Raw required-config keys, loader errors, tracebacks, trust judgments, and update recommendations are not exposed.
+Ready, version-consistent fleets with no incomplete enabled plugins stay quiet. Raw required-config keys, loader errors, tracebacks, trust judgments, and update recommendations are not exposed.
 
 ## Status
 

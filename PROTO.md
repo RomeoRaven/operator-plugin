@@ -8,7 +8,7 @@ This standalone protoAgent plugin is the durable owner for the operator-control-
 
 `PROTO.md` is this repository's single agent-grounding source. Ordinary discovery surfaces such as `README.md` point here, matching the AOS pointer model. Do not add `AGENTS.md` or `CLAUDE.md` pointer copies by convention; those high-power instruction surfaces require a separate, explicit repository decision.
 
-The current 0.4 slice inspects up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts, returns deterministic source-attributed fleet evidence, and emits bounded attention findings for observed runtime-version skew and enabled plugins reported incomplete by the target.
+The current 0.5 slice inspects up to 20 explicitly configured protoAgent targets concurrently through their existing read-only HTTP contracts, returns deterministic source-attributed fleet evidence, and emits bounded attention findings for observed target readiness, runtime-version skew, and enabled plugins reported incomplete by the target.
 
 Do not add fleet writes, config mutation, process control, consent execution, broad alert policy, raw required-config details, plugin trust/update policy, dashboards, writable target registries, or upstream-core changes to this slice.
 
@@ -38,6 +38,7 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 - One failed source must not erase evidence from another source; one failed target must not erase evidence from another target.
 - Every source records endpoint, observation time, availability, and HTTP status.
 - `/healthz` HTTP 503 is valid negative readiness evidence, not a transport failure.
+- Unreachable, degraded, and not-ready target states produce one target-attributed `target_readiness_attention` diagnostic. It carries only the normalized status and a safe inspection hint; it does not infer cause or authorize a target change.
 
 ## Acceptance criteria
 
@@ -51,6 +52,7 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 8. Given two or more observed runtime versions, when the fleet snapshot completes, then one deterministic `fleet_version_skew` attention signal groups target IDs by exact version and attributes the evidence to `GET /api/runtime/status`.
 9. Given all comparable targets report one version, when the fleet snapshot completes, then no version-skew finding is manufactured.
 10. Given an enabled plugin is explicitly reported `incomplete`, when the fleet snapshot completes, then one target-attributed `plugin_configuration_incomplete` diagnostic lists only plugin ID, name, and version; disabled/complete plugins and raw required-config metadata do not enter the finding.
+11. Given a target is unreachable, degraded, or not ready, when the fleet snapshot completes, then one deterministic target-attributed readiness diagnostic reports only the observed normalized state and a read-only next inspection; ready targets produce no readiness finding.
 
 ## Commands
 
