@@ -211,7 +211,27 @@ async def collect_snapshot(
 def _fleet_findings(snapshots: list[dict[str, Any]], *, observed_at: str) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     versions: dict[str, list[str]] = {}
+    next_inspection = {
+        "unreachable": "Inspect target reachability and authentication before retrying the snapshot.",
+        "degraded": "Inspect the unavailable evidence source before drawing conclusions from the partial snapshot.",
+        "not_ready": "Inspect target startup and readiness evidence without changing the target.",
+    }
     for snapshot in snapshots:
+        target_status = snapshot["status"]
+        if target_status in next_inspection:
+            findings.append(
+                {
+                    "code": "target_readiness_attention",
+                    "severity": "attention",
+                    "scope": "target",
+                    "target": snapshot["target"]["id"],
+                    "observed_at": observed_at,
+                    "source": "GET /healthz and GET /api/runtime/status",
+                    "classification": "diagnostic",
+                    "evidence": {"status": target_status},
+                    "safe_next_inspection": next_inspection[target_status],
+                }
+            )
         runtime = snapshot["sources"]["runtime"]
         if runtime["state"] != "available":
             continue
