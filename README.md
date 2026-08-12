@@ -47,3 +47,13 @@ pytest -q
 ```
 
 See `PROTO.md` for architecture and safety boundaries.
+
+## Platform evidence
+
+GitHub Actions runs lint, formatting, and the standalone test suite on Linux,
+native Windows, and macOS. This is source/CI evidence, not a tagged release or
+installed-runtime acceptance claim.
+
+## License
+
+[MIT](LICENSE)

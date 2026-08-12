@@ -15,7 +15,7 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 ## Runtime shape
 
 - Python 3.11+
-- Host-provided `langchain-core` and `httpx`
+- Host-provided `langchain-core`; manifest-declared host dependency `httpx`
 - External plugin entry: `register(registry)` in root `__init__.py`
 - Manifest/config owner: `protoagent.plugin.yaml`, section `operator_control`
 - Ships disabled; enablement is the operator's trust decision
@@ -77,6 +77,7 @@ Run the suite standalone. For host integration, load the plugin through the curr
 
 - Use RED → GREEN → REFACTOR for behavior changes.
 - Keep host imports out of module top level except host-provided runtime libraries.
+- Declare every non-host runtime dependency in `protoagent.plugin.yaml` with the interpreter scope where the plugin imports it.
 - Keep `pyproject.toml` and manifest versions in lockstep.
 - Prefer composing stable public protoAgent surfaces over importing core implementation modules.
 - Do not add target selection as a tool argument; changing the configured fleet is an operator decision.
