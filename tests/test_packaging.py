@@ -20,11 +20,27 @@ def test_manifest_and_project_are_safe_and_version_locked():
     assert manifest["config"]["target_tokens"] == ""
     assert manifest["secrets"] == ["target_tokens"]
     assert manifest["capabilities"]["filesystem"] == "none"
+    assert manifest["repository"] == "https://github.com/RomeoRaven/operator-plugin"
+    assert manifest["homepage"] == "https://agent.protolabs.studio"
+    assert manifest["requires_pip"] == [{"pkg": "httpx>=0.27,<1", "scope": "host"}]
     settings = {field["key"]: field for field in manifest["settings"]}
     assert settings["targets"]["type"] == "string_list"
     assert settings["target_tokens"]["type"] == "secret"
     assert settings["timeout_seconds"]["type"] == "number"
     assert project["version"] == manifest["version"] == "0.5.0"
+    license_text = (ROOT / "LICENSE").read_text()
+    assert license_text.startswith("MIT License\n")
+    assert "Copyright (c) 2026 RomeoRaven" in license_text
+
+
+def test_ci_covers_declared_platforms():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    for runner in ("ubuntu-latest", "windows-latest", "macos-latest"):
+        assert runner in workflow
+    assert "pytest -q" in workflow
+    assert "ruff check ." in workflow
+    assert "ruff format --check ." in workflow
 
 
 def test_entry_imports_with_protoagent_host_package_semantics(monkeypatch):

@@ -6,7 +6,11 @@ description: >-
   performs GET-only health and runtime-status reads concurrently, isolates target
   failures, and returns deterministic secret-free evidence for target readiness,
   version skew, and incomplete plugin configuration.
+repository: https://github.com/RomeoRaven/operator-plugin
+homepage: https://agent.protolabs.studio
 enabled: false
+requires_pip:
+  - { pkg: "httpx>=0.27,<1", scope: host }
 config_section: operator_control
 config:
   targets: []
