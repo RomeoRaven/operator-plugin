@@ -1,6 +1,7 @@
 id: operator_control
 name: Operator Control
 version: 0.5.0
+min_protoagent_version: "0.131.3"
 description: >-
   Read-only operator evidence for a small configured protoAgent fleet. The tool
   performs GET-only health and runtime-status reads concurrently, isolates target

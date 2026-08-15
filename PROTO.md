@@ -15,6 +15,8 @@ Do not add fleet writes, config mutation, process control, consent execution, br
 ## Runtime shape
 
 - Python 3.11+
+- Minimum declared protoAgent version: 0.131.3, the earliest bundle-integrated host baseline retained for this 0.5 implementation
+- Current qualification host candidate: RR protoAgent 0.136.0 at `1d80d15e229ac51a419b53c3378db1bea4796379`; this identity is a campaign baseline, not installed-runtime acceptance
 - Host-provided `langchain-core`; manifest-declared host dependency `httpx`
 - External plugin entry: `register(registry)` in root `__init__.py`
 - Manifest/config owner: `protoagent.plugin.yaml`, section `operator_control`
